@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Multi Tuition Pay Tracker (Fixed Calendar)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: "Inter", sans-serif; }
+    .day { transition: background-color 0.18s, transform 0.08s; }
+    .day:hover { transform: scale(1.05); }
+    .other-month { color: #D1D5DB; cursor: not-allowed; }
+    .color-dot { width:12px; height:12px; border-radius:50%; display:inline-block; margin-right:6px; vertical-align:middle; }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4 text-gray-800">
+  <div id="app" class="bg-white w-full max-w-3xl rounded-xl shadow-lg p-6 space-y-6">
+    <h1 class="text-2xl font-bold text-center text-indigo-600">Multi Tuition Pay Tracker</h1>
+
+    <!-- Tuition header -->
+    <div class="flex justify-between items-center">
+      <h2 class="text-lg font-semibold">Tuitions</h2>
+      <button id="add-tuition-btn" class="bg-indigo-600 text-white px-3 py-2 rounded-lg hover:bg-indigo-700 text-sm font-medium">
+        + Add Tuition
+      </button>
+    </div>
+
+    <!-- Selector -->
+    <select id="tuition-select" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
+      <!-- filled dynamically -->
+    </select>
+
+    <!-- Add tuition panel -->
+    <div id="tuition-settings" class="hidden space-y-3 border-t pt-4">
+      <h3 class="text-md font-semibold text-indigo-600">Add New Tuition</h3>
+      <input id="tuition-name" placeholder="Tuition Name (e.g. Physics)" class="w-full p-2 border border-gray-300 rounded-lg" />
+      <input id="tuition-sessions" type="number" placeholder="Total Sessions" class="w-full p-2 border border-gray-300 rounded-lg" />
+      <input id="tuition-salary" type="number" placeholder="Total Salary (BDT)" class="w-full p-2 border border-gray-300 rounded-lg" />
+      <input id="tuition-color" type="color" value="#10B981" class="w-full h-10 rounded-lg border border-gray-300" />
+      <div class="flex justify-end space-x-2">
+        <button id="cancel-add" class="px-3 py-2 bg-gray-300 rounded-lg hover:bg-gray-400 text-sm">Cancel</button>
+        <button id="save-tuition" class="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm">Save</button>
+      </div>
+    </div>
+
+    <!-- Calendar -->
+    <div>
+      <div class="flex justify-between items-center mb-4">
+        <button id="prev-month" class="p-2 hover:bg-gray-200 rounded-full">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        </button>
+        <h3 id="month-year" class="text-lg font-semibold"></h3>
+        <button id="next-month" class="p-2 hover:bg-gray-200 rounded-full">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+        </button>
+      </div>
+
+      <div class="grid grid-cols-7 gap-1 text-center text-xs font-medium text-gray-500 mb-2">
+        <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+      </div>
+
+      <div id="calendar" class="grid grid-cols-7 gap-1"></div>
+    </div>
+
+    <!-- Summary -->
+    <div id="summary" class="bg-indigo-50 rounded-lg p-4 space-y-2">
+      <h3 class="text-md font-semibold text-indigo-700">Earnings Summary</h3>
+      <div id="tuition-summary" class="space-y-1 text-sm"></div>
+      <div class="border-t pt-2 mt-2 font-semibold text-indigo-800">
+        Total Earnings: <span id="total-earnings">0.00</span> BDT
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      // Elements
+      const addBtn = document.getElementById("add-tuition-btn");
+      const tuitionSelect = document.getElementById("tuition-select");
+      const tuitionSettings = document.getElementById("tuition-settings");
+      const saveBtn = document.getElementById("save-tuition");
+      const cancelBtn = document.getElementById("cancel-add");
+      const calendarEl = document.getElementById("calendar");
+      const monthYearEl = document.getElementById("month-year");
+      const summaryEl = document.getElementById("tuition-summary");
+      const totalEarningsEl = document.getElementById("total-earnings");
+      const nameInput = document.getElementById("tuition-name");
+      const sessionsInput = document.getElementById("tuition-sessions");
+      const salaryInput = document.getElementById("tuition-salary");
+      const colorInput = document.getElementById("tuition-color");
+      const prevBtn = document.getElementById("prev-month");
+      const nextBtn = document.getElementById("next-month");
+
+      // Data
+      let tuitions = JSON.parse(localStorage.getItem("multiPay.tuitions") || "[]");
+      let currentMonth = new Date();
+
+      // Save helper
+      function saveTuitions() {
+        localStorage.setItem("multiPay.tuitions", JSON.stringify(tuitions));
+      }
+
+      // Utility: format date YYYY-MM-DD
+      function formatDate(date) {
+        return date.toISOString().split("T")[0];
+      }
+
+      // Build a readable gradient for n colors
+      function gradientFromColors(colors) {
+        if (!colors || colors.length === 0) return "";
+        if (colors.length === 1) return colors[0];
+        const len = colors.length;
+        const stops = [];
+        for (let i = 0; i < len; i++) {
+          const pos = Math.round((i / (len - 1)) * 100);
+          stops.push(`${colors[i]} ${pos}%`);
+        }
+        return `linear-gradient(135deg, ${stops.join(", ")})`;
+      }
+
+      // Populate tuition selector
+      function renderTuitionSelector() {
+        tuitionSelect.innerHTML = "";
+        if (tuitions.length === 0) {
+          const placeholder = document.createElement("option");
+          placeholder.textContent = "No tuitions yet — add one";
+          placeholder.disabled = true;
+          placeholder.selected = true;
+          tuitionSelect.appendChild(placeholder);
+          return;
+        }
+        tuitions.forEach((t) => {
+          const opt = document.createElement("option");
+          opt.value = t.id;
+          opt.textContent = t.name;
+          tuitionSelect.appendChild(opt);
+        });
+        // Ensure we have a selected value (auto-select first if none)
+        if (!tuitionSelect.value) {
+          tuitionSelect.value = tuitions[0].id;
+        }
+      }
+
+      // Render calendar
+      function renderCalendar() {
+        const year = currentMonth.getFullYear();
+        const month = currentMonth.getMonth();
+        monthYearEl.textContent = currentMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+        calendarEl.innerHTML = "";
+
+        const firstDay = new Date(year, month, 1).getDay();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+        // Previous month filler
+        const daysInPrev = new Date(year, month, 0).getDate();
+        for (let i = 0; i < firstDay; i++) {
+          const d = document.createElement("div");
+          d.textContent = daysInPrev - firstDay + i + 1;
+          d.className = "day p-2 text-center rounded-full other-month";
+          calendarEl.appendChild(d);
+        }
+
+        // Current month days
+        for (let day = 1; day <= daysInMonth; day++) {
+          const d = document.createElement("div");
+          const dateStr = formatDate(new Date(year, month, day));
+          d.textContent = day;
+          d.className = "day p-2 text-center rounded-full cursor-pointer select-none";
+          d.style.background = ""; d.style.color = ""; d.style.fontWeight = "";
+
+          // Find all tuitions that marked this day
+          const activeTuitions = tuitions.filter(t => Array.isArray(t.selectedDates) && t.selectedDates.includes(dateStr));
+          if (activeTuitions.length > 0) {
+            const colors = activeTuitions.map(t => t.color || "#000");
+            d.style.background = gradientFromColors(colors);
+            d.style.color = "white";
+            d.style.fontWeight = "700";
+          } else {
+            // Highlight today (if not selected)
+            const todayStr = formatDate(new Date());
+            if (dateStr === todayStr) {
+              d.classList.add("font-semibold");
+              d.style.background = "#EEF2FF"; // subtle indigo bg
+              d.style.color = "#4F46E5";
+            }
+          }
+
+          // Click behavior: toggle for currently selected tuition
+          d.addEventListener("click", () => {
+            const activeId = tuitionSelect.value;
+            if (!activeId) {
+              alert("Please select or add a tuition first.");
+              return;
+            }
+            const tuition = tuitions.find(t => t.id == activeId);
+            if (!tuition) {
+              alert("Selected tuition not found. Try reloading.");
+              return;
+            }
+            // ensure selectedDates exists
+            if (!Array.isArray(tuition.selectedDates)) tuition.selectedDates = [];
+            const idx = tuition.selectedDates.indexOf(dateStr);
+            if (idx > -1) tuition.selectedDates.splice(idx, 1);
+            else tuition.selectedDates.push(dateStr);
+
+            saveTuitions();
+            renderCalendar();   // reflect immediately
+            renderSummary();
+          });
+
+          calendarEl.appendChild(d);
+        }
+
+        // Next month filler
+        const totalCells = firstDay + daysInMonth;
+        const nextDays = (7 - (totalCells % 7)) % 7;
+        for (let i = 1; i <= nextDays; i++) {
+          const d = document.createElement("div");
+          d.textContent = i;
+          d.className = "day p-2 text-center rounded-full other-month";
+          calendarEl.appendChild(d);
+        }
+      }
+
+      // Render summary
+      function renderSummary() {
+        summaryEl.innerHTML = "";
+        let totalEarnings = 0;
+        tuitions.forEach(t => {
+          // Backward-compat: accept either totalSessions or totalSessionsNumber etc.
+          const sessions = Number(t.totalSessions || t.sessions || 0);
+          const salary = Number(t.totalSalary || t.salary || 0);
+          const completed = Array.isArray(t.selectedDates) ? t.selectedDates.length : 0;
+          const payPer = sessions > 0 ? (salary / sessions) : 0;
+          const earned = payPer * completed;
+          totalEarnings += earned;
+          const div = document.createElement("div");
+          div.innerHTML = `<span class="color-dot" style="background:${t.color || '#10B981'}"></span>
+            <strong>${escapeHtml(t.name || "Untitled")}</strong>: ${completed}/${sessions} sessions → ${earned.toFixed(2)} BDT`;
+          summaryEl.appendChild(div);
+        });
+        totalEarningsEl.textContent = totalEarnings.toFixed(2);
+      }
+
+      // Simple escape to avoid injection in innerHTML usage for name
+      function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, (m) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m]);
+      }
+
+      // Events
+      addBtn.addEventListener("click", () => tuitionSettings.classList.remove("hidden"));
+      cancelBtn.addEventListener("click", () => {
+        tuitionSettings.classList.add("hidden");
+        nameInput.value = sessionsInput.value = salaryInput.value = "";
+      });
+
+      saveBtn.addEventListener("click", () => {
+        const name = nameInput.value.trim();
+        const sessions = Number(sessionsInput.value);
+        const salary = Number(salaryInput.value);
+        const color = colorInput.value || "#10B981";
+        if (!name) { alert("Enter a tuition name."); return; }
+        if (!(sessions > 0)) { alert("Enter total sessions (> 0)."); return; }
+        if (!(salary > 0)) { alert("Enter total salary (> 0)."); return; }
+        const newT = { id: Date.now().toString(), name, color, totalSessions: sessions, totalSalary: salary, selectedDates: [] };
+        tuitions.push(newT);
+        saveTuitions();
+        tuitionSettings.classList.add("hidden");
+        nameInput.value = sessionsInput.value = salaryInput.value = "";
+        renderTuitionSelector();
+        // select the new tuition
+        tuitionSelect.value = newT.id;
+        renderCalendar();
+        renderSummary();
+      });
+
+      // If user switches tuition, re-render (so add clicks will affect selected tuition)
+      tuitionSelect.addEventListener("change", () => {
+        renderCalendar();
+        // no need to update summary but keep in sync
+        renderSummary();
+      });
+
+      prevBtn.addEventListener("click", () => { currentMonth.setMonth(currentMonth.getMonth() - 1); renderCalendar(); });
+      nextBtn.addEventListener("click", () => { currentMonth.setMonth(currentMonth.getMonth() + 1); renderCalendar(); });
+
+      // init (safe)
+      function init() {
+        // Ensure older saved objects still work
+        if (!Array.isArray(tuitions)) tuitions = [];
+
+        renderTuitionSelector();
+
+        // If tuitions exist, make sure something is selected
+        if (tuitions.length > 0 && !tuitionSelect.value) {
+          tuitionSelect.value = tuitions[0].id;
+        }
+
+        renderCalendar();
+        renderSummary();
+      }
+
+      init();
+    });
+  </script>
+</body>
+</html>
