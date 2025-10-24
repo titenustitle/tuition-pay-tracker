@@ -70,6 +70,7 @@
       <div class="border-t pt-2 mt-2 font-semibold text-indigo-800">
         Total Earnings: <span id="total-earnings">0.00</span> BDT
       </div>
+           <button id="reset-all" class="w-full mt-4 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 text-sm font-medium">Reset All Data</button>
     </div>
   </div>
 
@@ -284,6 +285,17 @@
 
       prevBtn.addEventListener("click", () => { currentMonth.setMonth(currentMonth.getMonth() - 1); renderCalendar(); });
       nextBtn.addEventListener("click", () => { currentMonth.setMonth(currentMonth.getMonth() + 1); renderCalendar(); });
+          // Reset button
+    const resetBtn = document.getElementById("reset-all");
+    resetBtn.addEventListener("click", () => {
+      if (confirm("Are you sure you want to delete all data? This cannot be undone.")) {
+        tuitions = [];
+        localStorage.removeItem("multiPay.tuitions");
+        renderTuitionSelector();
+        renderCalendar();
+        renderSummary();
+      }
+    });
 
       // init (safe)
       function init() {
@@ -306,3 +318,4 @@
   </script>
 </body>
 </html>
+
